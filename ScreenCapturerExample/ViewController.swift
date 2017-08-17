@@ -11,6 +11,8 @@ import WebKit
 import AVFoundation
 
 class ViewController : UIViewController {
+    @IBAction func hangup(_ sender: Any) {
+    }
 
     var localVideoTrack: TVILocalVideoTrack?
     var remoteView: TVIVideoView?
@@ -66,6 +68,7 @@ class ViewController : UIViewController {
             remoteView?.frame = CGRect.zero
         }
     }
+    @IBOutlet weak var videoView: UIView!
 
     func setupLocalMedia() {
         // Setup screen capturer

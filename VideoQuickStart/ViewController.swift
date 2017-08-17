@@ -9,8 +9,38 @@ import UIKit
 
 import TwilioVideo
 
-class ViewController: UIViewController {
+class ViewController: UIViewController, UIWebViewDelegate {
 
+    func webView(_ webView: UIWebView, shouldStartLoadWith request: URLRequest, navigationType: UIWebViewNavigationType) -> Bool {
+        
+        if(request.url?.scheme == "speakapp") {
+            let url: String = (request.url?.absoluteString)!
+            
+            let destination = getQueryStringParameter(url: url, param: "destination")!
+            targetRoom = getQueryStringParameter(url: url, param: "room")!
+            
+            if(destination == "call") {
+                roomTextField.text = targetRoom
+                self.connect(sender: self)
+            }
+            
+            return false
+        }
+        return true
+    }
+    
+    func getQueryStringParameter(url: String, param: String) -> String? {
+        guard let url = URLComponents(string: url) else { return nil }
+        return url.queryItems?.first(where: { $0.name == param })?.value
+    }
+    
+    @IBAction func hangup(_ sender: Any) {
+        performSegue(withIdentifier: "hangupSegue", sender: nil)
+    }
+    
+    @IBOutlet weak var webView: UIWebView!
+
+    var targetRoom: String = ""
     // MARK: View Controller Members
     
     // Configure access token manually for testing, if desired! Create one manually in the console
@@ -18,7 +48,7 @@ class ViewController: UIViewController {
     var accessToken = "TWILIO_ACCESS_TOKEN"
   
     // Configure remote URL to fetch token from
-    var tokenUrl = "http://localhost:8000/token.php"
+    var tokenUrl = "https://speak-app-dev.herokuapp.com/token"
     
     // Video SDK components
     var room: TVIRoom?
@@ -32,6 +62,12 @@ class ViewController: UIViewController {
     
     // `TVIVideoView` created from a storyboard
     @IBOutlet weak var previewView: TVIVideoView!
+    
+    @IBOutlet weak var topView: UIView!
+    
+    @IBOutlet weak var videoView: UIView!
+    
+    @IBOutlet weak var myRemoteView: TVIVideoView!
 
     @IBOutlet weak var connectButton: UIButton!
     @IBOutlet weak var disconnectButton: UIButton!
@@ -44,6 +80,13 @@ class ViewController: UIViewController {
     // MARK: UIViewController
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        let url = URL(string: "https://speak-app-dev.herokuapp.com")!
+        let request = URLRequest(url: url)
+        webView.loadRequest(request)
+        webView.scrollView.isScrollEnabled = true
+        webView.scalesPageToFit = false
+        webView.delegate = self
 
         if PlatformUtils.isSimulator {
             self.previewView.removeFromSuperview()
@@ -53,13 +96,19 @@ class ViewController: UIViewController {
         }
         
         // Disconnect and mic button will be displayed when the Client is connected to a Room.
-        self.disconnectButton.isHidden = true
+//        self.disconnectButton.isHidden = true
+//        self.topView.sendSubview(toBack: self.disconnectButton)
+        self.topView.sendSubview(toBack: self.videoView)
         self.micButton.isHidden = true
         
         self.roomTextField.delegate = self
         
         let tap = UITapGestureRecognizer(target: self, action: #selector(ViewController.dismissKeyboard))
         self.view.addGestureRecognizer(tap)
+        
+//        self.topView.sendSubview(toBack: self.myRemoteView)
+//        self.topView.sendSubview(toBack: self.previewView)
+        self.topView.sendSubview(toBack: self.videoView)
     }
     
     func setupRemoteVideoView() {
@@ -139,12 +188,16 @@ class ViewController: UIViewController {
         room = TwilioVideo.connect(with: connectOptions, delegate: self)
         
         logMessage(messageText: "Attempting to connect to room \(String(describing: self.roomTextField.text))")
+
+        // jga
+//        webView.isHidden = true
         
         self.showRoomUI(inRoom: true)
         self.dismissKeyboard()
     }
     
     @IBAction func disconnect(sender: AnyObject) {
+//        webView.isHidden = false
         self.room!.disconnect()
         logMessage(messageText: "Attempting to disconnect from room \(room!.name)")
     }
@@ -219,7 +272,14 @@ class ViewController: UIViewController {
         self.roomLine.isHidden = inRoom
         self.roomLabel.isHidden = inRoom
         self.micButton.isHidden = !inRoom
-        self.disconnectButton.isHidden = !inRoom
+//        self.disconnectButton.isHidden = !inRoom
+        if(inRoom) {
+//            self.topView. bringSubview(toFront: self.disconnectButton)
+            self.topView.bringSubview(toFront: self.videoView)
+        } else {
+//            self.topView.sendSubview(toBack: self.disconnectButton)
+            self.topView.sendSubview(toBack: self.videoView)
+        }
         UIApplication.shared.isIdleTimerDisabled = inRoom
     }
     
@@ -232,9 +292,11 @@ class ViewController: UIViewController {
     func cleanupRemoteParticipant() {
         if ((self.participant) != nil) {
             if ((self.participant?.videoTracks.count)! > 0) {
-                self.participant?.videoTracks[0].removeRenderer(self.remoteView!)
-                self.remoteView?.removeFromSuperview()
-                self.remoteView = nil
+                self.participant?.videoTracks[0].removeRenderer(self.myRemoteView!)
+                // jga
+//                self.topView.sendSubview(toBack: self.myRemoteView)
+//                self.topView.sendSubview(toBack: self.previewView)
+                self.topView.sendSubview(toBack: self.videoView)
             }
         }
         self.participant = nil
@@ -291,7 +353,9 @@ extension ViewController : TVIRoomDelegate {
        logMessage(messageText: "Room \(room.name), Participant \(participant.identity) connected")
     }
     
+    // jga
     func room(_ room: TVIRoom, participantDidDisconnect participant: TVIParticipant) {
+//        webView.isHidden = false
         if (self.participant == participant) {
             cleanupRemoteParticipant()
         }
@@ -305,8 +369,10 @@ extension ViewController : TVIParticipantDelegate {
         logMessage(messageText: "Participant \(participant.identity) added video track")
 
         if (self.participant == participant) {
-            setupRemoteVideoView()
-            videoTrack.addRenderer(self.remoteView!)
+            videoTrack.addRenderer(self.myRemoteView!)
+//            self.topView.bringSubview(toFront: self.myRemoteView)
+//            self.topView.bringSubview(toFront: self.previewView)
+            self.topView.bringSubview(toFront: self.videoView)
         }
     }
     
@@ -314,9 +380,10 @@ extension ViewController : TVIParticipantDelegate {
         logMessage(messageText: "Participant \(participant.identity) removed video track")
 
         if (self.participant == participant) {
-            videoTrack.removeRenderer(self.remoteView!)
-            self.remoteView?.removeFromSuperview()
-            self.remoteView = nil
+            videoTrack.removeRenderer(self.myRemoteView!)
+//            self.topView.sendSubview(toBack: self.myRemoteView)
+//            self.topView.sendSubview(toBack: self.previewView)
+            self.topView.sendSubview(toBack: self.videoView)
         }
     }
     
